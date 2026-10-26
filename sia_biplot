@@ -1,0 +1,82 @@
+#################################################################
+#############   BIPLOT - SIA ANALYSIS - Chelonia     ############
+#############               SIA Turtles              ############
+#################################################################
+
+{
+  library(ggplot2)
+  library(dplyr)
+  library(readxl)
+}
+
+#Import dataset
+dataset <- read_excel("dataset.xlsx", range = "A1:J130")
+
+#visualize dataset
+head(dataset)
+str(dataset)
+
+data <- dataset %>%
+  filter(!is.na(d13C), !is.na(d15N)) %>%
+  transmute(
+    iso1      = d13C,
+    iso2      = d15N,
+    group     = as.factor(species),   
+    community = as.factor(type)   
+  ) %>%
+  as.data.frame()                          
+
+head(data)
+
+#Calculating mean +- SD for d13c and d15n
+df_summary <- data %>%
+  group_by(group, community) %>%
+  summarise(
+    mean_iso1 = mean(iso1, na.rm = TRUE),
+    mean_iso2 = mean(iso2, na.rm = TRUE),
+    sd_iso1   = sd(iso1, na.rm = TRUE),
+    sd_iso2   = sd(iso2, na.rm = TRUE),
+    n = n(),
+    .groups = "drop"
+  )
+
+df_summary
+
+## PLOTTING
+## 
+ggplot(data, aes(x = iso1, y = iso2, colour = group, shape = community)) +
+  
+  geom_point(size = 2.5, alpha = 0.5) +
+  
+  # means
+  geom_point(data = df_summary,
+             aes(x = mean_iso1, y = mean_iso2, colour = group, shape = community), 
+             size = 4,
+             inherit.aes = FALSE) +
+  
+  ## vertical error bars (Y)
+  geom_errorbar(data = df_summary,
+                aes(x = mean_iso1,
+                    ymin = mean_iso2 - sd_iso2,
+                    ymax = mean_iso2 + sd_iso2,
+                    colour = group),
+                linewidth = 1,
+                inherit.aes = FALSE
+                ) +
+  
+  # horizontal error bars (X)
+  geom_errorbar(data = df_summary,
+                aes(y = mean_iso2,
+                    xmin = mean_iso1 - sd_iso1,
+                    xmax = mean_iso1 + sd_iso1,
+                    colour = group),
+                orientation = "y",
+                linewidth = 1,
+                inherit.aes = FALSE) +
+  scale_shape_manual(values = c(16, 17, 15, 18, 1, 6)) +
+  labs(x = expression(delta^13*C~("\u2030")), #title = "",
+       y = expression(delta^15*N~("\u2030"))) +
+  theme(axis.title = element_text(size = 14, face = "bold")) +
+  theme_bw()
+
+
