@@ -61,13 +61,13 @@ my_cols <- c("#EC663B", "#66CC66", "#727171", "#E4E255",
 # are always included. TDFs are simulated with simulateTDF().
 consumer_config <- tribble(
   ~label,                      ~filter_col, ~filter_val,         ~nN, ~meanN, ~sdN,  ~nC, ~meanC, ~sdC,  ~tdf_source,
-  "Chelonia mydas (juvenile)",  "grouping", "turtle_chemyd_J",    20,  4.15,  0.47,   20,  2.18,  0.59,  "<add reference>",
-  "Chelonia mydas (subadult)",  "grouping", "turtle_chemyd_SA",   20,  4.93,  0.59,   20,  2.58,  1.19,  "<add reference>",
-  "Amphipods",                  "grouping", "amphipod",            5,  2.60,  0.15,    5, -0.11,  0.14,  "Caut et al. 2009 (check reference)",
+  "Chelonia mydas (juvenile)",  "grouping", "turtle_chemyd_J",    20,  4.15,  0.47,   20,  2.18,  0.59,  "<Vander Zanden et al. 2012>",
+  "Chelonia mydas (subadult)",  "grouping", "turtle_chemyd_SA",   20,  4.93,  0.59,   20,  2.58,  1.19,  "<Vander Zanden et al. 2012>",
+  "Amphipods",                  "grouping", "amphipod",            5,  2.60,  0.15,    5, -0.11,  0.14,  "Caut et al. 2009 (formula for invertebrates)",
   "Echinometra lucunter",       "spp",      "Echinometra lucunter", 11, 0.62,  0.15,   11,  0.84,  0.51,  "L. variegatus, Prado et al. 2012",
-  "Sparisoma axillare",         "spp",      "Sparisoma axillare", 20,  3.58,  0.09,   20,  0.27,  0.25,  "Caut et al. 2009",
-  "Ophioblennius trinitatis",   "spp",      "Ophioblennius trinitatis", 10, 3.75, 0.13, 10, -0.24, 0.11, "Caut et al. 2009",
-  "Stegastes fuscus",           "spp",      "Stegastes fuscus",   25,  3.02,  0.06,   25,  0.06,  0.13,  "Caut et al. 2009"
+  "Sparisoma axillare",         "spp",      "Sparisoma axillare", 20,  3.58,  0.09,   20,  0.27,  0.25,  "Caut et al. 2009 (formula for fishes)",
+  "Ophioblennius trinitatis",   "spp",      "Ophioblennius trinitatis", 10, 3.75, 0.13, 10, -0.24, 0.11, "Caut et al. 2009 (formula for fishes)",
+  "Stegastes fuscus",           "spp",      "Stegastes fuscus",   25,  3.02,  0.06,   25,  0.06,  0.13,  "Caut et al. 2009 (formula for fishes)"
 )
 
 # ---- Import data ------------------------------------------------
