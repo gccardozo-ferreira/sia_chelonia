@@ -1,0 +1,400 @@
+#################################################################
+# Title:    Diet analysis of Chelonia mydas (juveniles vs sub-adults)
+# Purpose:  (1) PERMANOVA and nMDS of diet composition (Bray-Curtis)
+#           (2) Dietary niche breadth (Levins) and niche overlap
+#               (Morisita-Horn) between stages
+#           (3) Resource selection (Manly selection ratios, design I)
+# Input:    data/diet_data.xlsx (sheet and cell range set in the
+#           Parameters section)
+#           Metadata columns: Code, Stage, Class, CCC, EST_g, Triado_g
+#           All other columns: dietary categories (numeric)
+# Outputs:  output/permanova_stage.csv
+#           output/betadisper_permutest.txt
+#           output/nmds_envfit_vectors.csv
+#           output/Dietary_niche_indices.xlsx
+#           output/manly_selection_ratios.csv
+#           output/figures/betadisper_stage.png
+#           output/figures/nmds_diet.png
+#           output/figures/manly_juvenile.png
+#           output/figures/manly_subadult.png
+#           output/figures/manly_selection_ratios.png
+#           output/sessionInfo_diet.txt
+# Author:   <your name>
+# Date:     2026-10-29
+# Usage:    Open the .Rproj file (so here() finds the project root),
+#           start a fresh R session, then run the script top to bottom.
+#
+# Requirements:
+#   - R packages: here, readxl, dplyr, vegan, ggplot2, writexl,
+#     adehabitatHS
+#   - Save this file with UTF-8 encoding (the sheet name contains "ê").
+#################################################################
+
+# ---- Packages ---------------------------------------------------
+library(here)
+library(readxl)
+library(dplyr)
+library(vegan)
+library(ggplot2)
+library(writexl)
+library(adehabitatHS)
+
+# ---- Paths ------------------------------------------------------
+diet_file <- here("data", "diet_data.xlsx")
+out_dir   <- here("output")
+fig_dir   <- here("output", "figures")
+
+dir.create(fig_dir, recursive = TRUE, showWarnings = FALSE)
+
+# Copies the plot currently on screen to a PNG file
+save_current_plot <- function(file, width = 7, height = 5) {
+  dev.copy(png, filename = file, width = width, height = height,
+           units = "in", res = 300)
+  invisible(dev.off())
+}
+
+# ---- Parameters -------------------------------------------------
+# The diet table is a block inside a larger sheet, so the cell range
+# must be given. Exporting that block to a CSV would make this simpler.
+diet_sheet <- "Gênero"
+diet_range <- "C45:AM81"
+
+# Non-dietary columns (all other columns are dietary categories)
+meta_cols <- c("Code", "Stage", "Class", "CCC", "EST_g", "Triado_g")
+
+stage_levels <- c("Juvenile", "Subadult")
+
+seed             <- 123
+n_perm_dispersion <- 999
+n_perm_permanova  <- 9999
+n_perm_envfit     <- 9999
+ellipse_conf      <- 0.90   # confidence level of the nMDS ellipses
+
+# ---- Import data ------------------------------------------------
+data.perm <- read_excel(diet_file, sheet = diet_sheet, range = diet_range,
+                        col_names = TRUE)
+
+str(data.perm)
+
+missing_cols <- setdiff(meta_cols, names(data.perm))
+if (length(missing_cols) > 0) {
+  stop("Missing column(s) in the diet table: ",
+       paste(missing_cols, collapse = ", "))
+}
+
+# Dietary variables = every column that is not metadata
+food_vars <- setdiff(names(data.perm), meta_cols)
+
+not_numeric <- food_vars[!sapply(data.perm[food_vars], is.numeric)]
+if (length(not_numeric) > 0) {
+  stop("Non-numeric dietary column(s): ", paste(not_numeric, collapse = ", "))
+}
+
+quali  <- as.data.frame(data.perm[, meta_cols])
+quanti <- as.data.frame(data.perm[, food_vars])
+
+quali$Stage <- factor(quali$Stage, levels = stage_levels)
+
+head(quali)
+head(quanti)
+
+#################################################################
+# 1. PERMANOVA
+#################################################################
+set.seed(seed)
+
+spe.bray <- vegdist(quanti, method = "bray")
+
+# Assumption: homogeneity of multivariate dispersions
+beta.spp  <- betadisper(spe.bray, group = quali$Stage)
+disp_test <- permutest(beta.spp, permutations = n_perm_dispersion)
+print(disp_test)
+
+capture.output(print(disp_test),
+               file = file.path(out_dir, "betadisper_permutest.txt"))
+
+plot(beta.spp)
+save_current_plot(file.path(fig_dir, "betadisper_stage.png"))
+
+# PERMANOVA: differences in diet between stages
+permanova1 <- adonis2(quanti ~ Stage, data = quali,
+                      method = "bray", permutations = n_perm_permanova)
+print(permanova1)
+
+write.csv(as.data.frame(permanova1),
+          file.path(out_dir, "permanova_stage.csv"))
+
+#################################################################
+# 2. nMDS
+#################################################################
+df <- quanti
+rownames(df) <- quali$Code   # row names = sample codes
+
+# nMDS with Bray-Curtis dissimilarity and 2 dimensions (k = 2)
+set.seed(seed)
+nmds <- metaMDS(df, distance = "bray", k = 2, trymax = 100,
+                autotransform = TRUE)
+
+# Stress: goodness of fit of the 2-D solution
+nmds$stress
+
+# Coordinates of each individual, with the metadata
+site_scores <- cbind(as.data.frame(nmds$points), quali)
+
+# Fit dietary categories as vectors on the ordination
+vf <- envfit(as.data.frame(nmds$points), df, perm = n_perm_envfit)
+vf
+
+vf_table <- data.frame(
+  Variable = rownames(vf$vectors$arrows),
+  vf$vectors$arrows,
+  r2       = vf$vectors$r,
+  p_value  = vf$vectors$pvals,
+  row.names = NULL
+)
+write.csv(vf_table, file.path(out_dir, "nmds_envfit_vectors.csv"),
+          row.names = FALSE)
+
+spp.vec <- as.data.frame(scores(vf, display = "vectors"))
+spp.vec$Species <- rownames(spp.vec)
+
+# Group centroids and ellipses
+NMDS <- data.frame(MDS1  = nmds$points[, 1],
+                   MDS2  = nmds$points[, 2],
+                   group = quali$Stage)
+
+NMDS.mean <- aggregate(NMDS[, 1:2], list(group = NMDS$group), "mean")
+
+# Ellipse parameters (nothing is drawn here)
+ord <- ordiellipse(nmds, NMDS$group, display = "sites",
+                   kind = "se", conf = ellipse_conf, draw = "none")
+
+# Coordinates of an ellipse from its covariance matrix
+veganCovEllipse <- function(cov, center = c(0, 0), scale = 1, npoints = 100) {
+  theta  <- (0:npoints) * 2 * pi / npoints
+  Circle <- cbind(cos(theta), sin(theta))
+  t(center + scale * t(Circle %*% chol(cov)))
+}
+
+df_ell <- do.call(rbind, lapply(levels(NMDS$group), function(g) {
+  ell <- as.data.frame(veganCovEllipse(ord[[g]]$cov,
+                                       ord[[g]]$center,
+                                       ord[[g]]$scale))
+  names(ell) <- c("MDS1", "MDS2")
+  cbind(ell, group = g)
+}))
+
+nmds_plot <-
+  ggplot(data = site_scores, aes(x = MDS1, y = MDS2)) +
+  geom_point(aes(colour = Stage), size = 5, alpha = 0.7) +
+  # group centroids
+  geom_point(data = NMDS.mean, aes(colour = group), size = 3, shape = 15) +
+  labs(subtitle = paste("Stress =", round(nmds$stress, 4))) +
+  # dietary vectors
+  geom_text(data = spp.vec, aes(x = MDS1, y = MDS2, label = Species),
+            size = 4, colour = "black") +
+  geom_segment(data = spp.vec,
+               aes(x = 0, xend = MDS1, y = 0, yend = MDS2),
+               arrow = arrow(length = unit(0.20, "cm")), colour = "grey55") +
+  # ellipses
+  geom_path(data = df_ell, aes(x = MDS1, y = MDS2, colour = group),
+            linewidth = 1, linetype = 2, show.legend = TRUE) +
+  theme_bw()
+
+print(nmds_plot)
+
+ggsave(file.path(fig_dir, "nmds_diet.png"), plot = nmds_plot,
+       width = 9, height = 7, dpi = 300)
+
+#################################################################
+# 3. Dietary niche breadth (Levins) and overlap (Morisita-Horn)
+#################################################################
+
+# ---- 3.1 Select dietary variables -------------------------------
+# Remove dietary categories with zero values in the entire dataset
+food_vars_nz <- food_vars[colSums(data.perm[, food_vars], na.rm = TRUE) > 0]
+
+diet_data <- data.perm %>%
+  select(Stage, all_of(food_vars_nz)) %>%
+  filter(!is.na(Stage)) %>%
+  filter(if_all(all_of(food_vars_nz), ~ !is.na(.))) %>%
+  filter(rowSums(across(all_of(food_vars_nz))) > 0)
+
+# Number of dietary resources
+n_resources <- length(food_vars_nz)
+
+# ---- 3.2 Pooled dietary proportions per stage -------------------
+stage_totals <- diet_data %>%
+  group_by(Stage) %>%
+  summarise(across(all_of(food_vars_nz), sum), .groups = "drop")
+
+# Convert totals into proportions
+diet_prop <- as.data.frame(stage_totals[, food_vars_nz])
+diet_prop <- diet_prop / rowSums(diet_prop)
+rownames(diet_prop) <- stage_totals$Stage
+
+# ---- 3.3 Levins' niche breadth ----------------------------------
+levins_B  <- apply(diet_prop, 1, function(x) 1 / sum(x^2))
+levins_BA <- (levins_B - 1) / (n_resources - 1)   # standardized
+
+levins_results <- data.frame(
+  Stage    = names(levins_B),
+  Levin_B  = as.numeric(levins_B),
+  Levin_BA = as.numeric(levins_BA)
+)
+
+print(levins_results)
+
+# ---- 3.4 Morisita-Horn niche overlap ----------------------------
+stage_pairs <- combn(rownames(diet_prop), 2, simplify = FALSE)
+
+morisita_results <- lapply(stage_pairs, function(pair) {
+
+  p <- as.numeric(diet_prop[pair[1], ])
+  q <- as.numeric(diet_prop[pair[2], ])
+
+  overlap <- (2 * sum(p * q)) / (sum(p^2) + sum(q^2))
+
+  data.frame(Stage_1 = pair[1],
+             Stage_2 = pair[2],
+             Morisita_Horn = overlap)
+})
+
+morisita_results <- bind_rows(morisita_results)
+
+print(morisita_results)
+
+# ---- 3.5 Export results -----------------------------------------
+write_xlsx(
+  list(Levin_niche_breadth   = levins_results,
+       Morisita_Horn_overlap = morisita_results),
+  file.path(out_dir, "Dietary_niche_indices.xlsx")
+)
+
+#################################################################
+# 4. Resource selection: Manly selection ratios (design I)
+#################################################################
+# Resource availability and use, in percent, one row per category
+resources <- tribble(
+  ~resource,           ~available, ~used_juvenile, ~used_subadult,
+  "Bryopsidaceae",       0.91,       0.06,           0.72,
+  "Caulerpaceae",        1.93,       0.23,          16.75,
+  "Cladophoraceae",      0.18,       0,              0,
+  "Valoniaceae",         0.23,       0,              0,
+  "Halimedaceae",       13.21,       0,              0,
+  "Dictyotaceae",       14.54,       0.64,           8.78,
+  "Sargassaceae",        1.56,       0,              0,
+  "Scytosiphonaceae",    0.03,       0,              0,
+  "Gelidiales",          0.42,      58.06,          22.22,
+  "Halymeniaceae",       0.05,       6.45,           2.21,
+  "Rhodomelaceae",       1.03,       3.58,           5.30,
+  "Cystocloniaceae",     0.59,       0,              0,
+  "Solieriaceae",        0.39,       0,              0,
+  "Scinaiaceae",         0.13,       0,              0,
+  "Corallinaceae",       0.02,       0,              0,
+  "Lithophyllaceae",     9.01,       0,              0,
+  "Alga_Incrustante",    2.69,       0,              0,
+  "Turf",               13.63,       0,              0,
+  "Coral",              14.57,       0,              0,
+  "Porifera",            1.46,       0,              0,
+  "Angiosperma",         0.70,      15.34,           6.67
+)
+
+stopifnot(
+  nrow(resources) == 21,
+  all(resources$available     >= 0),
+  all(resources$used_juvenile >= 0),
+  all(resources$used_subadult >= 0)
+)
+
+resource_names <- resources$resource
+
+DISP_REC     <- setNames(resources$available,     resource_names)
+JUV_REC_UTIL <- setNames(resources$used_juvenile, resource_names)
+SUB_REC_UTIL <- setNames(resources$used_subadult, resource_names)
+
+# Manly selection ratios, design I (availability known).
+# Note: widesI() treats 'u' as counts. With percentages the selection
+# ratios (wi) are valid, but the chi-square tests in the printed
+# results depend on the total of 'u', so they should not be interpreted.
+wi_juvenile <- widesI(u = JUV_REC_UTIL, a = DISP_REC, avknown = TRUE)
+wi_subadult <- widesI(u = SUB_REC_UTIL, a = DISP_REC, avknown = TRUE)
+
+# Display the package results
+print(wi_juvenile)
+print(wi_subadult)
+
+# Compact table of selection ratios
+results_table <- data.frame(
+  Resource              = resource_names,
+  Available_percent     = DISP_REC,
+  Juvenile_used_percent = JUV_REC_UTIL,
+  Juvenile_wi           = wi_juvenile$wi,
+  Subadult_used_percent = SUB_REC_UTIL,
+  Subadult_wi           = wi_subadult$wi
+)
+
+# Round numeric columns for easier reading
+results_table[-1] <- lapply(results_table[-1], round, digits = 3)
+
+print(results_table, row.names = FALSE)
+
+write.csv(results_table, file.path(out_dir, "manly_selection_ratios.csv"),
+          row.names = FALSE)
+
+# Package plots: juveniles
+old_par <- par(mfrow = c(2, 2))
+plot(wi_juvenile)
+save_current_plot(file.path(fig_dir, "manly_juvenile.png"), width = 8, height = 8)
+par(old_par)
+
+# Package plots: sub-adults
+old_par <- par(mfrow = c(2, 2))
+plot(wi_subadult)
+save_current_plot(file.path(fig_dir, "manly_subadult.png"), width = 8, height = 8)
+par(old_par)
+
+# ---- Preference plot with ggplot2 -------------------------------
+# Ratios of the two stages, resources ordered by the juvenile ratio
+plot_data <- data.frame(
+  Resource = factor(resource_names,
+                    levels = resource_names[order(wi_juvenile$wi)]),
+  Juvenile = wi_juvenile$wi,
+  Subadult = wi_subadult$wi
+)
+
+# Both stages in long format
+plot_values <- rbind(
+  data.frame(Resource = plot_data$Resource,
+             Age_group = "Juvenile",
+             wi = plot_data$Juvenile),
+  data.frame(Resource = plot_data$Resource,
+             Age_group = "Subadult",
+             wi = plot_data$Subadult)
+)
+
+# On the log scale, resources that were not used (wi = 0) cannot be
+# shown and are dropped by ggplot2 (with a warning).
+manly_plot <-
+  ggplot(plot_values, aes(x = wi, y = Resource, color = Age_group)) +
+  geom_vline(xintercept = 1, linetype = "dashed", color = "gray40") +
+  geom_point(size = 3, position = position_dodge(width = 0.5)) +
+  scale_x_log10() +
+  scale_color_manual(values = c("Juvenile" = "#E69F00",
+                                "Subadult" = "#0072B2")) +
+  labs(
+    title = "Resource selection by age group",
+    x = "Manly selection ratio (wi, log scale)",
+    y = "Resource category",
+    color = "Age group"
+  ) +
+  theme_minimal()
+
+print(manly_plot)
+
+ggsave(file.path(fig_dir, "manly_selection_ratios.png"), plot = manly_plot,
+       width = 8, height = 6, dpi = 300)
+
+# ---- Session info (reproducibility) -----------------------------
+writeLines(capture.output(sessionInfo()),
+           file.path(out_dir, "sessionInfo_diet.txt"))
