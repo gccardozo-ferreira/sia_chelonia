@@ -8,7 +8,7 @@
 # Outputs:  output/summary_isotopes.csv
 #           output/figures/biplot_sia.png
 #           output/sessionInfo.txt
-# Author:   <your name>
+# Author:   Gabriel C. Cardozo-Ferreira
 # Date:     2026-10-26
 # Usage:    Open the .Rproj file (so here() finds the project root),
 #           start a fresh R session, then run the script top to bottom.
