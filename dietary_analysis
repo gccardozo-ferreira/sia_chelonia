@@ -10,8 +10,7 @@
 #           Parameters section)
 #           Metadata columns: Code, Stage, Class, CCC, EST_g, Triado_g
 #           All other columns: dietary categories (numeric)
-#           data/benthic_cover.xlsx (sheet "CB", cell range set in the
-#           Parameters section)
+#           data/benthic_cover.xlsx (sheet "benthic_cover")
 #           Columns: Division, family, item and one column per site
 #           (benthic cover, %)
 # Outputs:  output/permanova_stage.csv
@@ -35,7 +34,7 @@
 # Requirements:
 #   - R packages: here, readxl, dplyr, tidyr, vegan, ggplot2, writexl,
 #     adehabitatHS
-#   - Save this file with UTF-8 encoding (the sheet name contains "ê").
+#   - Save this file with UTF-8 encoding (a site label contains "ã").
 #################################################################
 
 # ---- Packages ---------------------------------------------------
@@ -63,10 +62,9 @@ save_current_plot <- function(file, width = 7, height = 5) {
 }
 
 # ---- Parameters -------------------------------------------------
-# The diet table is a block inside a larger sheet, so the cell range
-# must be given. Exporting that block to a CSV would make this simpler.
-diet_sheet <- "Gênero"
-diet_range <- "C45:AM81"
+# Diet table: header in row 1, one row per turtle
+diet_sheet <- "Sheet1"
+diet_range <- "A1:AK37"
 
 # Non-dietary columns (all other columns are dietary categories)
 meta_cols <- c("Code", "Stage", "Class", "CCC", "EST_g", "Triado_g")
@@ -79,10 +77,10 @@ n_perm_permanova  <- 9999
 n_perm_envfit     <- 9999
 ellipse_conf      <- 0.90   # confidence level of the nMDS ellipses
 
-# Benthic cover table (Figure S2): also a block inside a larger sheet
+# Benthic cover table (Figure S2)
 cover_file  <- here("data", "benthic_cover.xlsx")
-cover_sheet <- "CB"
-cover_range <- "A16:F41"
+cover_sheet <- "benthic_cover"
+cover_range <- NULL   # NULL = read the whole sheet
 
 # Site columns of the cover table (names) and their labels in the figure
 site_labels <- c(Maragogi    = "Maragogi",
