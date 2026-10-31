@@ -1,0 +1,126 @@
+#################################################################
+# Title:    Stable isotope biplot (d13C vs d15N) - Chelonia mydas food web
+# Purpose:  Plot individual samples and group means +- SD for all
+#           species/types in the dataset
+# Input:    data/dataset_sia.xlsx, sheet "dataset"
+#           Columns used: species, type, d13C, d15N
+#           (d13C and d15N in per mil, vs. VPDB and air N2)
+# Outputs:  output/summary_isotopes.csv
+#           output/figures/biplot_sia.png
+#           output/sessionInfo.txt
+# Author:   Gabriel C. Cardozo-Ferreira
+# Date:     2026-10-26
+# Usage:    Open the .Rproj file (so here() finds the project root),
+#           start a fresh R session, then run the script top to bottom.
+#################################################################
+
+# ---- Packages ---------------------------------------------------
+library(here)
+library(readxl)
+library(dplyr)
+library(ggplot2)
+
+# ---- Paths ------------------------------------------------------
+input_file  <- here("data", "dataset_sia.xlsx")
+input_sheet <- "dataset"
+out_dir    <- here("output")
+fig_dir    <- here("output", "figures")
+
+dir.create(fig_dir, recursive = TRUE, showWarnings = FALSE)
+
+# ---- Import data ------------------------------------------------
+dataset <- read_excel(input_file, sheet = input_sheet)
+
+# Check the dataset
+head(dataset)
+str(dataset)
+
+required_cols <- c("species", "type", "d13C", "d15N")
+missing_cols  <- setdiff(required_cols, names(dataset))
+if (length(missing_cols) > 0) {
+  stop("Missing column(s) in dataset: ", paste(missing_cols, collapse = ", "))
+}
+
+# ---- Prepare data -----------------------------------------------
+data <- dataset %>%
+  filter(!is.na(d13C), !is.na(d15N)) %>%
+  transmute(
+    iso1      = d13C,
+    iso2      = d15N,
+    group     = as.factor(species),
+    community = as.factor(type)
+  ) %>%
+  as.data.frame()
+
+head(data)
+
+# ---- Summary: mean +- SD per group ------------------------------
+df_summary <- data %>%
+  group_by(group, community) %>%
+  summarise(
+    mean_iso1 = mean(iso1, na.rm = TRUE),
+    mean_iso2 = mean(iso2, na.rm = TRUE),
+    sd_iso1   = sd(iso1, na.rm = TRUE),
+    sd_iso2   = sd(iso2, na.rm = TRUE),
+    n         = n(),
+    .groups   = "drop"
+  )
+
+print(df_summary)
+
+write.csv(df_summary, file.path(out_dir, "summary_isotopes.csv"),
+          row.names = FALSE)
+
+# ---- Plot -------------------------------------------------------
+# One shape per community level (recycled if there are more levels)
+shape_values <- rep_len(c(16, 17, 15, 18, 1, 6, 3, 4), nlevels(data$community))
+
+p <- ggplot(data, aes(x = iso1, y = iso2, colour = group, shape = community)) +
+
+  # individual samples
+  geom_point(size = 2.5, alpha = 0.5) +
+
+  # group means
+  geom_point(data = df_summary,
+             aes(x = mean_iso1, y = mean_iso2, colour = group, shape = community),
+             size = 4,
+             inherit.aes = FALSE) +
+
+  # vertical error bars (SD of d15N)
+  geom_errorbar(data = df_summary,
+                aes(x = mean_iso1,
+                    ymin = mean_iso2 - sd_iso2,
+                    ymax = mean_iso2 + sd_iso2,
+                    colour = group),
+                width = 0.15,
+                linewidth = 1,
+                inherit.aes = FALSE) +
+
+  # horizontal error bars (SD of d13C)
+  geom_errorbar(data = df_summary,
+                aes(y = mean_iso2,
+                    xmin = mean_iso1 - sd_iso1,
+                    xmax = mean_iso1 + sd_iso1,
+                    colour = group),
+                orientation = "y",
+                width = 0.15,
+                linewidth = 1,
+                inherit.aes = FALSE) +
+
+  scale_shape_manual(values = shape_values) +
+  labs(x = expression(delta^13*C~("\u2030")),
+       y = expression(delta^15*N~("\u2030"))) +
+
+  # theme_bw() first, so the custom theme() is not overridden
+  theme_bw() +
+  theme(axis.title = element_text(size = 14, face = "bold"))
+
+print(p)
+
+# ---- Save figure ------------------------------------------------
+ggsave(file.path(fig_dir, "biplot_sia.png"),
+       plot = p, width = 8, height = 5.5, dpi = 300)
+
+# ---- Session info (reproducibility) -----------------------------
+writeLines(capture.output(sessionInfo()),
+           file.path(out_dir, "sessionInfo.txt"))
