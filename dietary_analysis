@@ -4,10 +4,16 @@
 #           (2) Dietary niche breadth (Levins) and niche overlap
 #               (Morisita-Horn) between stages
 #           (3) Resource selection (Manly selection ratios, design I)
+#           (4) Figure S2: benthic composition of the sampled reefs
+#               (food availability used for the resource selection)
 # Input:    data/diet_data.xlsx (sheet and cell range set in the
 #           Parameters section)
 #           Metadata columns: Code, Stage, Class, CCC, EST_g, Triado_g
 #           All other columns: dietary categories (numeric)
+#           data/benthic_cover.xlsx (sheet "CB", cell range set in the
+#           Parameters section)
+#           Columns: Division, family, item and one column per site
+#           (benthic cover, %)
 # Outputs:  output/permanova_stage.csv
 #           output/betadisper_permutest.txt
 #           output/nmds_envfit_vectors.csv
@@ -18,14 +24,16 @@
 #           output/figures/manly_juvenile.png
 #           output/figures/manly_subadult.png
 #           output/figures/manly_selection_ratios.png
+#           output/FigS2_benthic_composition_data.csv
+#           output/figures/FigS2_benthic_composition.png
 #           output/sessionInfo_diet.txt
-# Author:   <your name>
+# Author:   Gabriel C. Cardozo-Ferreira
 # Date:     2026-10-29
 # Usage:    Open the .Rproj file (so here() finds the project root),
 #           start a fresh R session, then run the script top to bottom.
 #
 # Requirements:
-#   - R packages: here, readxl, dplyr, vegan, ggplot2, writexl,
+#   - R packages: here, readxl, dplyr, tidyr, vegan, ggplot2, writexl,
 #     adehabitatHS
 #   - Save this file with UTF-8 encoding (the sheet name contains "ê").
 #################################################################
@@ -34,6 +42,7 @@
 library(here)
 library(readxl)
 library(dplyr)
+library(tidyr)
 library(vegan)
 library(ggplot2)
 library(writexl)
@@ -69,6 +78,16 @@ n_perm_dispersion <- 999
 n_perm_permanova  <- 9999
 n_perm_envfit     <- 9999
 ellipse_conf      <- 0.90   # confidence level of the nMDS ellipses
+
+# Benthic cover table (Figure S2): also a block inside a larger sheet
+cover_file  <- here("data", "benthic_cover.xlsx")
+cover_sheet <- "CB"
+cover_range <- "A16:F41"
+
+# Site columns of the cover table (names) and their labels in the figure
+site_labels <- c(Maragogi    = "Maragogi",
+                 Japaratinga = "Japaratinga",
+                 SM_Milagres = "São Miguel dos Milagres")
 
 # ---- Import data ------------------------------------------------
 data.perm <- read_excel(diet_file, sheet = diet_sheet, range = diet_range,
@@ -394,6 +413,98 @@ print(manly_plot)
 
 ggsave(file.path(fig_dir, "manly_selection_ratios.png"), plot = manly_plot,
        width = 8, height = 6, dpi = 300)
+
+#################################################################
+# 5. Figure S2: benthic composition of the sampled reefs
+#    (food availability used to calculate resource selection)
+#################################################################
+cover <- read_excel(cover_file, sheet = cover_sheet, range = cover_range,
+                    col_names = TRUE)
+
+str(cover)
+
+sites <- names(site_labels)
+
+required_cover_cols <- c("Division", "family", "item", sites)
+missing_cover_cols  <- setdiff(required_cover_cols, names(cover))
+if (length(missing_cover_cols) > 0) {
+  stop("Missing column(s) in the cover table: ",
+       paste(missing_cover_cols, collapse = ", "))
+}
+
+# Plot order of the divisions (legend) and families (y axis, bottom to top)
+division_levels <- c("Rhodophyta", "Heterokontophyta", "Chlorophyta",
+                     "Angiosperms", "Porifera", "Coral", "Zoantideo", "Turf")
+
+family_levels <- c("Turf", "Zoantideo", "Coral", "Porifera", "Cymodoceaceae",
+                   "Bryopsidaceae", "Caulerpaceae", "Cladophoraceae",
+                   "Valoniaceae", "Halimedaceae", "Dictyotaceae",
+                   "Sargassaceae", "Scytosiphonaceae", "Gelidiales",
+                   "Rhodomelaceae", "Grateloupiaceae", "Cystocloniaceae",
+                   "Encrusting algae", "Solieriaceae", "Scinaiaceae",
+                   "Corallinaceae")
+
+division_colours <- c(
+  "Chlorophyta"      = "#4DAF4A",
+  "Heterokontophyta" = "#A65628",
+  "Rhodophyta"       = "#E41A1C",
+  "Angiosperms"      = "#984EA3",
+  "Turf"             = "#FF7F00",
+  "Coral"            = "#377EB8",
+  "Porifera"         = "#F781BF",
+  "Zoantideo"        = "darkgray"
+)
+
+# Rows without a division are not benthic categories
+cover_valid <- cover %>%
+  filter(!is.na(Division), Division != "NA", Division != "")
+
+# Names missing from the level lists above would silently become NA
+unknown_family   <- setdiff(unique(cover_valid$family), family_levels)
+unknown_division <- setdiff(unique(cover_valid$Division), division_levels)
+if (length(unknown_family) > 0 || length(unknown_division) > 0) {
+  warning("Not in the plot order lists (they will appear as NA): ",
+          paste(c(unknown_family, unknown_division), collapse = ", "))
+}
+
+# Cover per site, summed over the items of each family
+plot_data <- cover_valid %>%
+  pivot_longer(
+    cols      = all_of(sites),
+    names_to  = "site",
+    values_to = "value"
+  ) %>%
+  filter(!is.na(value)) %>%
+  group_by(site, Division, family) %>%
+  summarise(value = sum(value), .groups = "drop") %>%
+  mutate(
+    Division = factor(Division, levels = division_levels),
+    site     = factor(site, levels = names(site_labels),
+                      labels = unname(site_labels)),
+    family   = factor(family, levels = family_levels)
+  )
+
+write.csv(plot_data, file.path(out_dir, "FigS2_benthic_composition_data.csv"),
+          row.names = FALSE)
+
+fig_s2 <-
+  ggplot(plot_data, aes(x = value, y = family, fill = Division)) +
+  geom_col(width = 0.55, alpha = .5) +
+  facet_grid(. ~ site, scales = "free_x") +
+  labs(x = "Benthic composition (%)", y = NULL) +
+  theme_classic() +
+  theme(
+    strip.background   = element_blank(),
+    panel.grid.major.x = element_line(color = "grey85"),
+    panel.grid.major.y = element_blank()
+  ) +
+  scale_fill_manual(values = division_colours)
+
+print(fig_s2)
+
+# For the journal, change the extension to .pdf or .tiff if needed
+ggsave(file.path(fig_dir, "FigS2_benthic_composition.png"), plot = fig_s2,
+       width = 10, height = 6, dpi = 300)
 
 # ---- Session info (reproducibility) -----------------------------
 writeLines(capture.output(sessionInfo()),
