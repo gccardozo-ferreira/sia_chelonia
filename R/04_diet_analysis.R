@@ -48,7 +48,11 @@ library(writexl)
 library(adehabitatHS)
 
 # ---- Paths ------------------------------------------------------
-diet_file <- here("data", "diet_data.xlsx")
+diet_file <- if (file.exists(here("data", "diet_data.xlsx"))) {
+  here("data", "diet_data.xlsx")
+} else {
+  here("diet_data.xlsx")
+}
 out_dir   <- here("output")
 fig_dir   <- here("output", "figures")
 
@@ -78,8 +82,12 @@ n_perm_envfit     <- 9999
 ellipse_conf      <- 0.90   # confidence level of the nMDS ellipses
 
 # Benthic cover table (Figure S2)
-cover_file  <- here("data", "benthic_cover.xlsx")
-cover_sheet <- "benthic_cover"
+cover_file  <- if (file.exists(here("data", "benthic_cover.xlsx"))) {
+  here("data", "benthic_cover.xlsx")
+} else {
+  here("benthic_cover.xlsx")
+}
+cover_sheet <- "Sheet1"
 cover_range <- NULL   # NULL = read the whole sheet
 
 # Site columns of the cover table (names) and their labels in the figure
