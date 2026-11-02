@@ -35,7 +35,11 @@ library(tRophicPosition)
 set.seed(3)
 
 # ---- Paths ------------------------------------------------------
-input_file <- here("data", "dataset_sia.xlsx")
+input_file <- if (file.exists(here("data", "dataset_sia.xlsx"))) {
+  here("data", "dataset_sia.xlsx")
+} else {
+  here("dataset_sia.xlsx")
+}
 out_dir    <- here("output")
 fig_dir    <- here("output", "figures")
 
@@ -61,13 +65,13 @@ my_cols <- c("#EC663B", "#66CC66", "#727171", "#E4E255",
 # are always included. TDFs are simulated with simulateTDF().
 consumer_config <- tribble(
   ~label,                      ~filter_col, ~filter_val,         ~nN, ~meanN, ~sdN,  ~nC, ~meanC, ~sdC,  ~tdf_source,
-  "Chelonia mydas (juvenile)",  "grouping", "turtle_chemyd_J",    20,  4.15,  0.47,   20,  2.18,  0.59,  "<add reference>",
-  "Chelonia mydas (subadult)",  "grouping", "turtle_chemyd_SA",   20,  4.93,  0.59,   20,  2.58,  1.19,  "<add reference>",
-  "Amphipods",                  "grouping", "amphipod",            5,  2.60,  0.15,    5, -0.11,  0.14,  "Caut et al. 2009 (check reference)",
+  "Chelonia mydas (juvenile)",  "grouping", "turtle_chemyd_J",    20,  4.15,  0.47,   20,  2.18,  0.59,  "Vander Zanden et al. 2012",
+  "Chelonia mydas (subadult)",  "grouping", "turtle_chemyd_SA",   20,  4.93,  0.59,   20,  2.58,  1.19,  "Vander Zanden et al. 2012",
+  "Amphipods",                  "grouping", "amphipod",            5,  2.60,  0.15,    5, -0.11,  0.14,  "Caut et al. 2009 (formula for invertebrates)",
   "Echinometra lucunter",       "spp",      "Echinometra lucunter", 11, 0.62,  0.15,   11,  0.84,  0.51,  "L. variegatus, Prado et al. 2012",
-  "Sparisoma axillare",         "spp",      "Sparisoma axillare", 20,  3.58,  0.09,   20,  0.27,  0.25,  "Caut et al. 2009",
-  "Ophioblennius trinitatis",   "spp",      "Ophioblennius trinitatis", 10, 3.75, 0.13, 10, -0.24, 0.11, "Caut et al. 2009",
-  "Stegastes fuscus",           "spp",      "Stegastes fuscus",   25,  3.02,  0.06,   25,  0.06,  0.13,  "Caut et al. 2009"
+  "Sparisoma axillare",         "spp",      "Sparisoma axillare", 20,  3.58,  0.09,   20,  0.27,  0.25,  "Caut et al. 2009 (formula for fish muscle)",
+  "Ophioblennius trinitatis",   "spp",      "Ophioblennius trinitatis", 10, 3.75, 0.13, 10, -0.24, 0.11, "Caut et al. 2009 (formula for fish muscle)",
+  "Stegastes fuscus",           "spp",      "Stegastes fuscus",   25,  3.02,  0.06,   25,  0.06,  0.13,  "Caut et al. 2009 (formula for fish muscle)"
 )
 
 # ---- Import data ------------------------------------------------
@@ -183,12 +187,37 @@ ggsave(file.path(fig_dir, "TP_credibility_intervals.png"),
 # ---- Food web biplot (d13C vs d15N) -----------------------------
 dplyr::glimpse(dataset)
 
-foodweb_biplot <- screenFoodWeb(dataset,
-                                grouping = c("spp", "study"),
-                                order = TRUE, printSummary = TRUE)
+# screenFoodWeb() requires at least two non-constant grouping levels.
+# This dataset contains a single study/location value, so a fallback plot
+# is created instead of letting the function fail.
+if (n_distinct(dataset$study) > 1 || n_distinct(dataset$location) > 1) {
+  foodweb_biplot <- screenFoodWeb(dataset,
+                                  grouping = c("spp", "location"),
+                                  order = TRUE, printSummary = TRUE)
+  ggsave(file.path(fig_dir, "foodweb_biplot.png"),
+         width = 8, height = 6, dpi = 300)
+} else {
+  foodweb_summary <- dataset %>%
+    filter(!is.na(d13C), !is.na(d15N)) %>%
+    group_by(spp, FG) %>%
+    summarise(mean_d13C = mean(d13C, na.rm = TRUE),
+              mean_d15N = mean(d15N, na.rm = TRUE),
+              .groups = "drop")
 
-ggsave(file.path(fig_dir, "foodweb_biplot.png"),
-       width = 8, height = 6, dpi = 300)
+  foodweb_plot <- ggplot(foodweb_summary,
+                         aes(x = mean_d13C, y = mean_d15N, colour = FG, label = spp)) +
+    geom_point(size = 3) +
+    geom_text(vjust = -0.7, size = 3, show.legend = FALSE) +
+    labs(x = expression(delta^13*C~("\u2030")),
+         y = expression(delta^15*N~("\u2030")),
+         colour = "Functional group") +
+    theme_bw() +
+    theme(axis.title = element_text(size = 12, face = "bold"))
+
+  print(foodweb_plot)
+  ggsave(file.path(fig_dir, "foodweb_biplot.png"), plot = foodweb_plot,
+         width = 8, height = 6, dpi = 300)
+}
 
 # ---- Pairwise comparison of posterior trophic positions ---------
 pairwiseTP <- pairwiseComparisons(TP_post, print = TRUE)
