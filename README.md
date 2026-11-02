@@ -11,11 +11,10 @@ All code and data are public in this repository.
 
 ```
 .
-├── R/
-│   ├── 01_biplot_sia.R            # δ13C–δ15N biplot (means ± SD)
-│   ├── 02_trophic_position.R      # Bayesian trophic position
-│   ├── 03_siber_niche.R           # isotopic niche (SIBER)
-│   └── 04_diet_analysis.R         # diet: PERMANOVA, nMDS, niche indices, Manly, Figure S2
+├── 01_biplot_sia.R                # δ13C–δ15N biplot (means ± SD)
+├── 02_trophic_position.R          # Bayesian trophic position
+├── 03_siber_niche.R               # isotopic niche (SIBER)
+├── 04_diet_analysis.R             # diet: PERMANOVA, nMDS, niche indices, Manly, Figure S2
 ├── data/
 │   ├── dataset_sia.xlsx           # isotope data (sheets: dataset, trophicposition)
 │   ├── diet_data.xlsx             # diet data
@@ -26,6 +25,10 @@ All code and data are public in this repository.
 ├── LICENSE
 └── README.md
 ```
+
+The analysis scripts are intentionally stored at the project root, while the raw
+Excel files live in `data/`. The scripts are written to accept either location
+for compatibility and will fall back to the project root if needed.
 
 ## Scripts
 
@@ -62,10 +65,11 @@ The R and package versions used are saved by each script in
 
 ## How to run
 
-1. Clone this repository and open the `.Rproj` file in RStudio (this makes
-   `here()` find the project root).
+1. Clone this repository and run the scripts from the project root. If using
+   RStudio, open the repository folder as the project.
 2. Check that the files in `data/` are present.
-3. Open a script from `R/` and run it from top to bottom.
+3. Open one of the four scripts in the project root and run it from top to
+   bottom.
 
 Bayesian models (JAGS) are not fully controlled by `set.seed()`, so small
 differences between runs are expected in `02` and `03`.
@@ -77,7 +81,7 @@ differences between runs are expected in `02` and `03`.
 | `data/dataset_sia.xlsx` | `dataset` | `01`, `03` | One row per isotope sample: `location`, `species`, `type`, `ccc`, `size_class`, `sample_id`, `d13C`, `d15N`, `C`, `N` |
 | `data/dataset_sia.xlsx` | `trophicposition` | `02` | `study`, `location`, `spp`, `FG` (functional group; `Benthic_BL` = benthic baseline), `d13C`, `d15N`, `NS`, `grouping` |
 | `data/diet_data.xlsx` | `Sheet1`, range `A1:AK37` | `04` | One row per turtle: `Code`, `Stage`, `Class`, `CCC`, `EST_g`, `Triado_g`, then the dietary categories (%) |
-| `data/benthic_cover.xlsx` | `benthic_cover` | `04` | `Division`, `family`, `item`, then benthic cover (%) at each site: `Maragogi`, `Japaratinga`, `SM_Milagres` |
+| `data/benthic_cover.xlsx` | `Sheet1` | `04` | `Division`, `family`, `item`, then benthic cover (%) at each site: `Maragogi`, `Japaratinga`, `SM_Milagres` |
 
 **Units and conventions**
 
@@ -91,7 +95,7 @@ differences between runs are expected in `02` and `03`.
 
 Sample collection and laboratory methods are described in the associated
 manuscript. The resource availability and use values for the Manly selection
-ratios are given in `R/04_diet_analysis.R`; availability corresponds to the
+ratios are given in `04_diet_analysis.R`; availability corresponds to the
 benthic composition shown in Figure S2.
 
 ## Citation
