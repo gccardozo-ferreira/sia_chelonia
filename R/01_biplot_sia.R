@@ -21,7 +21,11 @@ library(dplyr)
 library(ggplot2)
 
 # ---- Paths ------------------------------------------------------
-input_file  <- here("data", "dataset_sia.xlsx")
+input_file  <- if (file.exists(here("data", "dataset_sia.xlsx"))) {
+  here("data", "dataset_sia.xlsx")
+} else {
+  here("dataset_sia.xlsx")
+}
 input_sheet <- "dataset"
 out_dir    <- here("output")
 fig_dir    <- here("output", "figures")
